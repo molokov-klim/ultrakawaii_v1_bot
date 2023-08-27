@@ -38,9 +38,14 @@ async def cmd_start(message: types.Message):
 # Обработчик ввода имени
 @dp.message_handler(state=Form.name, content_types=types.ContentTypes.TEXT)
 async def process_name(message: types.Message, state: FSMContext):
-    # TODO: Добавьте логику валидации имени
+    name = message.text
+    # Валидация имени: только буквы, минимальная длина 2 символа
+    if len(name) < 2 or not name.replace(' ', '').isalpha():
+        await message.reply(
+            "Имя должно содержать только буквы и иметь длину не менее 2 символов. Пожалуйста, попробуйте еще раз.")
+        return
     await Form.next()  # переход к следующему состоянию
-    await state.update_data(name=message.text)  # сохранение имени
+    await state.update_data(name=name)  # сохранение имени
     await message.reply("Теперь напишите ваш email.")  # отправка сообщения
 
 
