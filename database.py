@@ -11,3 +11,18 @@ async def create_pool():
     )
 
 
+async def create_table(conn):
+    await conn.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        id serial PRIMARY KEY,
+        user_id INTEGER,
+        name VARCHAR(50),
+        email VARCHAR(50)
+    );
+    ''')
+
+
+async def add_user(conn, user_id, name, email):
+    await conn.execute('''
+    INSERT INTO users (user_id, name, email) VALUES ($1, $2, $3)
+    ''', user_id, name, email)
