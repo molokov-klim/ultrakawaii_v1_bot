@@ -1,4 +1,7 @@
 import logging
+
+from email_validator import validate_email, EmailNotValidError
+
 import config
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -7,6 +10,7 @@ from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ParseMode
 from aiogram.utils import executor
+
 
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO)
@@ -43,9 +47,17 @@ async def process_name(message: types.Message, state: FSMContext):
 # Обработчик ввода email
 @dp.message_handler(state=Form.email, content_types=types.ContentTypes.TEXT)
 async def process_email(message: types.Message, state: FSMContext):
-    # TODO: Добавьте логику валидации email
+    email = message.text
+    try:
+        # Валидация email
+        v = validate_email(email)
+        valid_email = v["email"]
+    except EmailNotValidError as error:
+        await message.reply("Введенный email недействителен. Пожалуйста, попробуйте еще раз.")
+        return
+
     await Form.category.set()  # переход к состоянию категории
-    await state.update_data(email=message.text)  # сохранение email
+    await state.update_data(email=valid_email)  # сохранение email
 
     # Создание кнопок для выбора категории
     markup = types.InlineKeyboardMarkup()
