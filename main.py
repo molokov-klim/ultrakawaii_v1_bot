@@ -1,6 +1,6 @@
 import logging
 
-from asyncpg import pool
+import asyncpg
 from email_validator import validate_email, EmailNotValidError
 
 import config
@@ -11,7 +11,7 @@ from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ParseMode
 from aiogram.utils import executor
-from database import create_pool, create_table, add_user
+from database import create_pool, add_user, get_user
 
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +24,6 @@ dp = Dispatcher(bot, storage=storage)
 
 # Определение состояний для машины состояний
 class Form(StatesGroup):
-    name = State()  # состояние для имени
     email = State()  # состояние для email
     category = State()  # состояние для категории
 
@@ -32,22 +31,33 @@ class Form(StatesGroup):
 # Обработчик команды /start
 @dp.message_handler(commands='start', state='*')
 async def cmd_start(message: types.Message):
-    await Form.name.set()  # переход к состоянию имени
-    await message.reply("Здравствуйте! Напишите ваше имя.")  # отправка сообщения
+    print(f"{message=}")
+    print(f"{message.from_user.id=}")
+    print(f"{message.from_user.first_name=}")
+    print(f"{message.from_user.last_name=}")
+    print(f"{message.from_user.language_code=}")
+    print(f"{message.date=}")
+    print(f"{message.location=}")
+    print(f"{message.animation=}")
 
+    user_id = message.from_user.id  # Получение user_id из сообщения
 
-# Обработчик ввода имени
-@dp.message_handler(state=Form.name, content_types=types.ContentTypes.TEXT)
-async def process_name(message: types.Message, state: FSMContext):
-    name = message.text
-    # Валидация имени: только буквы, минимальная длина 2 символа
-    if len(name) < 2 or not name.replace(' ', '').isalpha():
-        await message.reply(
-            "Имя должно содержать только буквы и иметь длину не менее 2 символов. Пожалуйста, попробуйте еще раз.")
-        return
-    await Form.next()  # переход к следующему состоянию
-    await state.update_data(name=name)  # сохранение имени
-    await message.reply("Теперь напишите ваш email.")  # отправка сообщения
+    print("1")
+    pool = await create_pool()
+    print("2")
+    async with pool.acquire() as conn:
+        print("3")
+        user_data = await get_user(conn, user_id)
+    print("4")
+    if user_data is not None:
+        print("5")
+        await message.reply(f"Здравствуй, {message.from_user.first_name}!")
+        # Здесь можно добавить дополнительную логику для уже существующих пользователей
+    else:
+        print("6")
+        await Form.email.set()  # переход к состоянию имени
+        print("7")
+        await message.reply("Теперь напишите ваш email.")  # отправка сообщения
 
 
 # Обработчик ввода email
@@ -65,15 +75,22 @@ async def process_email(message: types.Message, state: FSMContext):
     await Form.category.set()  # переход к состоянию категории
     await state.update_data(email=valid_email)  # сохранение email
 
-    # Получение всех данных из FSM
+    # Получение всех данных о пользователе
     user_data = await state.get_data()
-    user_id = message.from_user.id  # Получение user_id из сообщения
-    name = user_data.get("name")
-    email = user_data.get("email")
+    user_id = message.from_user.id
+    first_name = message.from_user.first_name  # Получение данных из сообщения
+    last_name = message.from_user.last_name
+    email = user_data.get("email")  # Получение email из FSM
+    date = message.date
 
+    pool = await create_pool()
     # Добавление пользователя в базу данных
     async with pool.acquire() as conn:
-        await add_user(conn, user_id, name, email)
+        await add_user(conn, user_id=user_id,
+                       first_name=first_name,
+                       last_name=last_name,
+                       email=email,
+                       registration_date=date)
 
     await message.reply("Вы успешно зарегистрированы!")
 
@@ -184,12 +201,6 @@ async def process_minicourse_sub_category(call: types.CallbackQuery):
                            "руб'...")
 
 
-async def on_startup(dp):
-    await create_pool()
-    async with pool.acquire() as conn:
-        await create_table(conn)
-
 # Запуск бота
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
-    executor.start_polling(dp, on_startup=on_startup)

@@ -1,28 +1,24 @@
 import asyncpg
 
+import config
+
 
 async def create_pool():
     return await asyncpg.create_pool(
-        user='your_user_name',
-        password='your_password',
-        database='your_database_name',
-        host='your_host',
-        port='your_port'
+        user=config.DB_USER,
+        password=config.DB_PASSWORD,
+        database=config.DB_NAME,
+        host=config.DB_HOST,
+        port=config.DB_PORT
     )
 
 
-async def create_table(conn):
+async def add_user(conn, user_id, first_name, last_name, email, registration_date):
     await conn.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        id serial PRIMARY KEY,
-        user_id INTEGER,
-        name VARCHAR(50),
-        email VARCHAR(50)
-    );
-    ''')
+    INSERT INTO users (user_id, first_name, last_name, email, registration_date) VALUES ($1, $2, $3, $4, $5)
+    ''', user_id, first_name, last_name, email, registration_date)
 
 
-async def add_user(conn, user_id, name, email):
-    await conn.execute('''
-    INSERT INTO users (user_id, name, email) VALUES ($1, $2, $3)
-    ''', user_id, name, email)
+async def get_user(conn, user_id):
+    return await conn.fetchrow('SELECT * FROM users WHERE user_id = $1', user_id)
+
