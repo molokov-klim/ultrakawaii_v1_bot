@@ -14,12 +14,21 @@ from aiogram.utils import executor
 from database import create_pool, add_user, get_user
 
 # Настройка логгирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, filename='bot.log')
 
 # Инициализация бота и диспетчера
 bot = Bot(token=config.BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
+
+pool = None
+main_menu_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+main_menu_keyboard.add("Главное меню")
+
+
+async def on_startup(dp):
+    global pool
+    pool = await create_pool()
 
 
 # Определение состояний для машины состояний
@@ -31,33 +40,17 @@ class Form(StatesGroup):
 # Обработчик команды /start
 @dp.message_handler(commands='start', state='*')
 async def cmd_start(message: types.Message):
-    print(f"{message=}")
-    print(f"{message.from_user.id=}")
-    print(f"{message.from_user.first_name=}")
-    print(f"{message.from_user.last_name=}")
-    print(f"{message.from_user.language_code=}")
-    print(f"{message.date=}")
-    print(f"{message.location=}")
-    print(f"{message.animation=}")
-
     user_id = message.from_user.id  # Получение user_id из сообщения
 
-    print("1")
-    pool = await create_pool()
-    print("2")
     async with pool.acquire() as conn:
-        print("3")
         user_data = await get_user(conn, user_id)
-    print("4")
-    if user_data is not None:
-        print("5")
-        await message.reply(f"Здравствуй, {message.from_user.first_name}!")
-        # Здесь можно добавить дополнительную логику для уже существующих пользователей
+
+    if user_data:
+        await message.reply(f"Здравствуй, {message.from_user.first_name}!", reply_markup=main_menu_keyboard)
     else:
-        print("6")
         await Form.email.set()  # переход к состоянию имени
-        print("7")
-        await message.reply("Теперь напишите ваш email.")  # отправка сообщения
+        await message.reply(
+            f"Здравствуй, {message.from_user.first_name}! Напиши свой email для окончания регистрации.")  # отправка сообщения
 
 
 # Обработчик ввода email
@@ -67,14 +60,12 @@ async def process_email(message: types.Message, state: FSMContext):
     try:
         # Валидация email
         v = validate_email(email)
-        valid_email = v["email"]
+        valid_email = v.email
     except EmailNotValidError as error:
         await message.reply("Введенный email недействителен. Пожалуйста, попробуйте еще раз.")
         return
-
     await Form.category.set()  # переход к состоянию категории
     await state.update_data(email=valid_email)  # сохранение email
-
     # Получение всех данных о пользователе
     user_data = await state.get_data()
     user_id = message.from_user.id
@@ -82,8 +73,6 @@ async def process_email(message: types.Message, state: FSMContext):
     last_name = message.from_user.last_name
     email = user_data.get("email")  # Получение email из FSM
     date = message.date
-
-    pool = await create_pool()
     # Добавление пользователя в базу данных
     async with pool.acquire() as conn:
         await add_user(conn, user_id=user_id,
@@ -91,23 +80,13 @@ async def process_email(message: types.Message, state: FSMContext):
                        last_name=last_name,
                        email=email,
                        registration_date=date)
-
-    await message.reply("Вы успешно зарегистрированы!")
-
-    # Создание кнопок для выбора категории
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("Услуги и цены", callback_data='services'),
-        types.InlineKeyboardButton("Обучение", callback_data='training'),
-        types.InlineKeyboardButton("Подарки", callback_data='gifts'),
-        types.InlineKeyboardButton("Мини-курс", callback_data='minicourse')
-    )
-
-    # Отправка сообщения с кнопками
-    await message.reply("Пожалуйста, выберите интересующий вас раздел:", reply_markup=markup)
+    # await message.reply("Вы успешно зарегистрированы! Пожалуйста, выберите интересующий вас раздел:",
+    #                     reply_markup=main_menu_keyboard)  # Используйте main_menu_keyboard здесь
+    await message.reply(f"{message.from_user.first_name}, твоя регистрация завершена успешно!",
+                        reply_markup=main_menu_keyboard)
+    await state.finish()  # Завершение FSM сессии
 
 
-# Обработчик выбора категории
 # Обработчик выбора категории
 @dp.callback_query_handler(lambda c: c.data in ['services', 'training', 'gifts', 'minicourse'], state='*')
 async def process_main_category(call: types.CallbackQuery, state: FSMContext):
@@ -149,6 +128,22 @@ async def process_main_category(call: types.CallbackQuery, state: FSMContext):
                                        callback_data='minicourse_lectures')
         )
         await bot.send_message(call.message.chat.id, "Выберите мини-курс:", reply_markup=markup)
+
+
+@dp.message_handler(lambda message: message.text == "Главное меню")
+async def show_main_menu(message: types.Message):
+    print("show_main_menu()")
+    # Создание кнопок для выбора категории
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("Услуги и цены", callback_data='services'),
+        types.InlineKeyboardButton("Обучение", callback_data='training'),
+        types.InlineKeyboardButton("Подарки", callback_data='gifts'),
+        types.InlineKeyboardButton("Мини-курс", callback_data='minicourse')
+    )
+
+    # Отправка сообщения с кнопками
+    await message.reply("Пожалуйста, выберите интересующий вас раздел:", reply_markup=markup)
 
 
 @dp.callback_query_handler(
@@ -201,6 +196,14 @@ async def process_minicourse_sub_category(call: types.CallbackQuery):
                            "руб'...")
 
 
+@dp.message_handler(lambda message: message.text.startswith('/'), state="*")
+async def unknown_command(message: types.Message, state: FSMContext):
+    await message.reply("Извини, я не понимаю эту команду. Я же просто бот. "
+                        "Пожалуйста, используй одну из известных мне команд.",
+                        reply_markup=main_menu_keyboard)
+    await state.finish()  # Завершение FSM сессии
+
+
 # Запуск бота
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp, on_startup=on_startup, skip_updates=True)
