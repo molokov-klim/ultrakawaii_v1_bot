@@ -193,7 +193,7 @@ async def process_minicourse_sub_category(call: types.CallbackQuery):
     await call.answer("Вы выбрали мини-курс.")  # подтверждение выбора
     await bot.send_message(call.message.chat.id,
                            "Полное описание 'Запись курса лекций по закупкам товаров в Китае без обратной связи 6888 "
-                           "руб'..,")
+                           "руб'...")
 
 
 @dp.message_handler(lambda message: message.text.startswith('/'), state="*")
