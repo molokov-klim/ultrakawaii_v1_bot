@@ -160,7 +160,7 @@ async def process_services_sub_category(call: types.CallbackQuery):
     elif call.data == 'customs':
         await bot.send_message(call.message.chat.id, "Описание доставки и таможенного оформления...")
     elif call.data == 'turnkey_brand':
-        await bot.send_message(call.message.chat.id, "Описание услуги 'Бренд под ключ'..,")
+        await bot.send_message(call.message.chat.id, "Описание услуги 'Бренд под ключ'...")
 
 
 @dp.callback_query_handler(
