@@ -152,7 +152,7 @@ async def process_services_sub_category(call: types.CallbackQuery):
     await call.answer("Вы выбрали подкатегорию.")  # подтверждение выбора
 
     if call.data == 'find_suppliers':
-        await bot.send_message(call.message.chat.id, "Форма и описание для поиска поставщиков и товаров...")
+        await bot.send_message(call.message.chat.id, "Форма и описание для поиска поставщиков и товаров..,")
     elif call.data == 'purchase_agent':
         await bot.send_message(call.message.chat.id, "Описание услуги агента по закупкам...")
     elif call.data == 'factory_check':
