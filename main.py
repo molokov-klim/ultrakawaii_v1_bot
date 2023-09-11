@@ -1,4 +1,9 @@
+
+import inspect
 import logging
+import os.path
+import time
+from datetime import datetime
 
 import asyncpg
 from email_validator import validate_email, EmailNotValidError
@@ -27,6 +32,7 @@ main_menu_keyboard.add("Главное меню")
 
 
 async def on_startup(dp):
+    print(f"{inspect.currentframe().f_code.co_name}")
     global pool
     pool = await create_pool()
 
@@ -40,6 +46,7 @@ class Form(StatesGroup):
 # Обработчик команды /start
 @dp.message_handler(commands='start', state='*')
 async def cmd_start(message: types.Message):
+    print(f"{inspect.currentframe().f_code.co_name}")
     user_id = message.from_user.id  # Получение user_id из сообщения
 
     async with pool.acquire() as conn:
@@ -56,6 +63,7 @@ async def cmd_start(message: types.Message):
 # Обработчик ввода email
 @dp.message_handler(state=Form.email, content_types=types.ContentTypes.TEXT)
 async def process_email(message: types.Message, state: FSMContext):
+    print(f"{inspect.currentframe().f_code.co_name}")
     email = message.text
     try:
         # Валидация email
@@ -80,16 +88,32 @@ async def process_email(message: types.Message, state: FSMContext):
                        last_name=last_name,
                        email=email,
                        registration_date=date)
-    # await message.reply("Вы успешно зарегистрированы! Пожалуйста, выберите интересующий вас раздел:",
-    #                     reply_markup=main_menu_keyboard)  # Используйте main_menu_keyboard здесь
     await message.reply(f"{message.from_user.first_name}, твоя регистрация завершена успешно!",
                         reply_markup=main_menu_keyboard)
     await state.finish()  # Завершение FSM сессии
 
 
+@dp.message_handler(lambda message: message.text == "Главное меню")
+async def show_main_menu(message: types.Message):
+    print(f"{inspect.currentframe().f_code.co_name}")
+    # Создание кнопок для выбора категории
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("Мои услуги", callback_data='services'),
+        types.InlineKeyboardButton("Выкуп товара", callback_data='buy_goods'),
+        types.InlineKeyboardButton("Консультация", callback_data='training'),
+        types.InlineKeyboardButton("Полезное", callback_data='useful'),
+        types.InlineKeyboardButton("Подарочки", callback_data='gifts'),
+    )
+
+    # Отправка сообщения с кнопками
+    await message.reply("Пожалуйста, выберите интересующий вас раздел:", reply_markup=markup)
+
+
 # Обработчик выбора категории
-@dp.callback_query_handler(lambda c: c.data in ['services', 'training', 'gifts', 'minicourse'], state='*')
+@dp.callback_query_handler(lambda c: c.data in ['services', 'buy_goods', 'training', 'useful', 'gifts'], state='*')
 async def process_main_category(call: types.CallbackQuery, state: FSMContext):
+    print(f"{inspect.currentframe().f_code.co_name}")
     await call.answer("Вы выбрали раздел.")  # подтверждение выбора
     await state.finish()  # завершение сессии бота
 
@@ -130,42 +154,46 @@ async def process_main_category(call: types.CallbackQuery, state: FSMContext):
         await bot.send_message(call.message.chat.id, "Выберите мини-курс:", reply_markup=markup)
 
 
-@dp.message_handler(lambda message: message.text == "Главное меню")
-async def show_main_menu(message: types.Message):
-    print("show_main_menu()")
-    # Создание кнопок для выбора категории
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("Услуги и цены", callback_data='services'),
-        types.InlineKeyboardButton("Обучение", callback_data='training'),
-        types.InlineKeyboardButton("Подарки", callback_data='gifts'),
-        types.InlineKeyboardButton("Мини-курс", callback_data='minicourse')
-    )
-
-    # Отправка сообщения с кнопками
-    await message.reply("Пожалуйста, выберите интересующий вас раздел:", reply_markup=markup)
-
-
 @dp.callback_query_handler(
     lambda c: c.data in ['find_suppliers', 'purchase_agent', 'factory_check', 'customs', 'turnkey_brand'])
 async def process_services_sub_category(call: types.CallbackQuery):
+    print(f"{inspect.currentframe().f_code.co_name}")
     await call.answer("Вы выбрали подкатегорию.")  # подтверждение выбора
 
     if call.data == 'find_suppliers':
-        await bot.send_message(call.message.chat.id, "Форма и описание для поиска поставщиков и товаров...")
+        await bot.send_message(call.message.chat.id, "Форма и описание для поиска поставщиков и товаров. В разработке.")
     elif call.data == 'purchase_agent':
-        await bot.send_message(call.message.chat.id, "Описание услуги агента по закупкам...")
+        await bot.send_message(chat_id=call.message.chat.id, text=
+        f'''
+        Как агент по закупкам в Китае, я могу предоставить вам следующие услуги, направленные на облегчение процесса закупки товаров и услуг от китайских производителей и поставщиков:
+
+        1. *Поиск* надёжных производителей или поставщиков
+        2. *Мы проводим переговоры* о ценах, условиях доставки и других деталях сделки
+        3. *Контроль качества* продукции на различных этапах производства
+        4. *Логистика*: выбор оптимального маршрута и способа доставки товаров от производителя до вашего склада
+        5. *Документация*: Помощь в оформлении всех необходимых таможенных и экспортных документов
+        6. *Бренд под ключ* - мы полностью берем на себя всю работу по созданию товара под вашим брендом
+        
+        Мой сервис особенно полезен для компаний, не имеющих опыта работы с китайскими рынками или желающих сэкономить время и ресурсы.
+        
+        Для начала работы со мной, *заполните форму и отправьте* мне.
+        👇👇👇
+        
+        {config.REQUEST_FORM}
+        ''',
+                               parse_mode=types.ParseMode.MARKDOWN)
     elif call.data == 'factory_check':
-        await bot.send_message(call.message.chat.id, "Описание проверки фабрики...")
+        await bot.send_message(call.message.chat.id, "Описание проверки фабрики. В разработке.")
     elif call.data == 'customs':
-        await bot.send_message(call.message.chat.id, "Описание доставки и таможенного оформления...")
+        await bot.send_message(call.message.chat.id, "Описание доставки и таможенного оформления. В разработке.")
     elif call.data == 'turnkey_brand':
-        await bot.send_message(call.message.chat.id, "Описание услуги 'Бренд под ключ'...")
+        await bot.send_message(call.message.chat.id, "Описание услуги 'Бренд под ключ'. В разработке.")
 
 
 @dp.callback_query_handler(
     lambda c: c.data in ['express_consultation', 'personal_session', 'big_consultation', 'mentorship'])
 async def process_training_sub_category(call: types.CallbackQuery):
+    print(f"{inspect.currentframe().f_code.co_name}")
     await call.answer("Вы выбрали вид обучения.")  # подтверждение выбора
 
     if call.data == 'express_consultation':
@@ -180,6 +208,7 @@ async def process_training_sub_category(call: types.CallbackQuery):
 
 @dp.callback_query_handler(lambda c: c.data in ['workbook', 'intro_lecture'])
 async def process_gifts_sub_category(call: types.CallbackQuery):
+    print(f"{inspect.currentframe().f_code.co_name}")
     await call.answer("Вы выбрали подарок.")  # подтверждение выбора
 
     if call.data == 'workbook':
@@ -190,14 +219,43 @@ async def process_gifts_sub_category(call: types.CallbackQuery):
 
 @dp.callback_query_handler(lambda c: c.data == 'minicourse_lectures')
 async def process_minicourse_sub_category(call: types.CallbackQuery):
+    print(f"{inspect.currentframe().f_code.co_name}")
     await call.answer("Вы выбрали мини-курс.")  # подтверждение выбора
     await bot.send_message(call.message.chat.id,
                            "Полное описание 'Запись курса лекций по закупкам товаров в Китае без обратной связи 6888 "
                            "руб'...")
 
 
+@dp.message_handler(content_types=types.ContentType.DOCUMENT)
+async def handle_docs(message: types.Message):
+    print(f"{inspect.currentframe().f_code.co_name}")
+    file_id = message.document.file_id
+    file_name = message.document.file_name
+    await message.reply(
+        f"Документ принят. Он будет передан нашей команде в обработку. Мы с вами свяжемся в ближайшее время")
+
+    # Удостоверьтесь, что путь для сохранения файлов существует
+    if not os.path.exists(config.FILEPATH_REQUEST_FORMS):
+        os.makedirs(config.FILEPATH_REQUEST_FORMS)
+
+    # Сохранение файла
+    file_path = await bot.get_file(file_id=file_id)
+    await bot.download_file(file_path=file_path.file_path,
+                            destination=os.path.join(config.FILEPATH_REQUEST_FORMS,
+                                                     f"{message.from_user.last_name}_{message.from_user.id}_{datetime.now().strftime('%d-%m-%Y %H-%M-%S')}_{file_name}"))
+    await bot.send_message(chat_id=config.ADMIN_ID, text=f'''
+    Принят документ от {message.from_user.first_name} {message.from_user.last_name} id={message.from_user.id}
+    ''')
+    await bot.send_document(chat_id=config.ADMIN_ID, document=file_id)
+    await bot.send_message(chat_id=config.ADMIN_2_ID, text=f'''
+    Принят документ от {message.from_user.first_name} {message.from_user.last_name} id={message.from_user.id}
+    ''')
+    await bot.send_document(chat_id=config.ADMIN_2_ID, document=file_id)
+
+
 @dp.message_handler(lambda message: message.text.startswith('/'), state="*")
 async def unknown_command(message: types.Message, state: FSMContext):
+    print(f"{inspect.currentframe().f_code.co_name}")
     await message.reply("Извини, я не понимаю эту команду. Я же просто бот. "
                         "Пожалуйста, используй одну из известных мне команд.",
                         reply_markup=main_menu_keyboard)
