@@ -330,11 +330,8 @@ async def admin(message: types.Message, state: FSMContext):
         async with pool.acquire() as conn:
             users_data = await get_all_users(conn)
 
-        if len(users_data) == 5:
-            users_data_str = f"Имя: {users_data['first_name']} {users_data['last_name']}\nEmail: {users_data['email']}\nID: {users_data['user_id']}\nДата регистрации: {users_data['registration_date']}"
-        else:
-            users_data_str = "\n".join(
-                [f"Имя: {user_data['first_name']} {user_data['last_name']}\nEmail: {user_data['email']}\nID: {user_data['user_id']}\nДата регистрации: {user_data['registration_date']}\n\n" for user_data in users_data])
+        users_data_str = "\n".join(
+            [f"Имя: {user_data['first_name']} {user_data['last_name']}\nEmail: {user_data['email']}\nID: {user_data['user_id']}\nДата регистрации: {user_data['registration_date']}\n\n" for user_data in users_data])
 
         await message.reply(f"{users_data_str}", reply_markup=main_menu_keyboard)
 
