@@ -290,12 +290,20 @@ async def handle_docs(message: types.Message):
     await bot.download_file(file_path=file_path.file_path,
                             destination=os.path.join(config.FILEPATH_REQUEST_FORMS,
                                                      f"{message.from_user.last_name}_{message.from_user.id}_{datetime.now().strftime('%d-%m-%Y %H-%M-%S')}_{file_name}"))
+    username = ''
+    try:
+        username = message.from_user.username
+    except:
+        pass
+
+    user_mention = f"@{username}"
+
     await bot.send_message(chat_id=config.ADMIN_ID, text=f'''
-    Принят документ от {message.from_user.first_name} {message.from_user.last_name} id={message.from_user.id}
+    Принят документ от {message.from_user.first_name} {message.from_user.last_name} {user_mention} id={message.from_user.id}
     ''')
     await bot.send_document(chat_id=config.ADMIN_ID, document=file_id)
     await bot.send_message(chat_id=config.ADMIN_2_ID, text=f'''
-    Принят документ от {message.from_user.first_name} {message.from_user.last_name} id={message.from_user.id}
+    Принят документ от {message.from_user.first_name} {message.from_user.last_name} {user_mention} id={message.from_user.id}
     ''')
     await bot.send_document(chat_id=config.ADMIN_2_ID, document=file_id)
 
