@@ -322,6 +322,7 @@ async def handle_docs(message: types.Message):
 @dp.message_handler(commands='admin', state="*")
 async def admin(message: types.Message, state: FSMContext):
     print(f"{inspect.currentframe().f_code.co_name}")
+    print("del")
 
     user_id = message.from_user.id
 
