@@ -286,15 +286,17 @@ async def handle_docs(message: types.Message):
     await message.reply(
         f"Документ принят. Он будет передан нашей команде в обработку. Мы с вами свяжемся в ближайшее время")
 
-    # Удостоверьтесь, что путь для сохранения файлов существует
-    if not os.path.exists(config.FILEPATH_REQUEST_FORMS):
-        os.makedirs(config.FILEPATH_REQUEST_FORMS)
+    if config.SAVE_FILES:
+        # Удостоверьтесь, что путь для сохранения файлов существует
+        if not os.path.exists(config.FILEPATH_REQUEST_FORMS):
+            os.makedirs(config.FILEPATH_REQUEST_FORMS)
 
-    # Сохранение файла
-    file_path = await bot.get_file(file_id=file_id)
-    await bot.download_file(file_path=file_path.file_path,
-                            destination=os.path.join(config.FILEPATH_REQUEST_FORMS,
-                                                     f"{message.from_user.last_name}_{message.from_user.id}_{datetime.now().strftime('%d-%m-%Y %H-%M-%S')}_{file_name}"))
+        # Сохранение файла
+        file_path = await bot.get_file(file_id=file_id)
+        await bot.download_file(file_path=file_path.file_path,
+                                destination=os.path.join(config.FILEPATH_REQUEST_FORMS,
+                                                         f"{message.from_user.last_name}_{message.from_user.id}_{datetime.now().strftime('%d-%m-%Y %H-%M-%S')}_{file_name}"))
+
     username = ''
     try:
         username = message.from_user.username
