@@ -15,7 +15,7 @@ from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ParseMode
 from aiogram.utils import executor
-from database import create_pool, add_user, get_user
+from database import create_pool, add_user, get_user, get_all_users
 
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO, filename='bot.log')
@@ -310,17 +310,38 @@ async def handle_docs(message: types.Message):
         user_data = await get_user(conn, user_id)
 
     await bot.send_message(chat_id=config.ADMIN_ID, text=f'''
-    Принят документ от {message.from_user.first_name} {message.from_user.last_name}
-    username: {user_mention}
-    email: {user_data['email']}
+    Принят документ от {message.from_user.first_name} {message.from_user.last_name}\nusername: {user_mention}\nemail: {user_data['email']}
     ''')
     await bot.send_document(chat_id=config.ADMIN_ID, document=file_id)
     await bot.send_message(chat_id=config.ADMIN_2_ID, text=f'''
-    Принят документ от {message.from_user.first_name} {message.from_user.last_name}
-    username: {user_mention}
-    email: {user_data['email']}
+    Принят документ от {message.from_user.first_name} {message.from_user.last_name}\nusername: {user_mention}\nemail: {user_data['email']}
     ''')
     await bot.send_document(chat_id=config.ADMIN_2_ID, document=file_id)
+
+
+@dp.message_handler(commands='admin', state="*")
+async def admin(message: types.Message, state: FSMContext):
+    print(f"{inspect.currentframe().f_code.co_name}")
+
+    user_id = message.from_user.id
+
+    if user_id == config.ADMIN_ID or user_id == config.ADMIN_2_ID:
+
+        async with pool.acquire() as conn:
+            users_data = await get_all_users(conn)
+
+        if len(users_data) == 5:
+            users_data_str = f"Имя: {users_data['first_name']} {users_data['last_name']}\nEmail: {users_data['email']}\nID: {users_data['user_id']}\nДата регистрации: {users_data['registration_date']}"
+        else:
+            users_data_str = "\n".join(
+                [f"Имя: {user_data['first_name']} {user_data['last_name']}\nEmail: {user_data['email']}\nID: {user_data['user_id']}\nДата регистрации: {user_data['registration_date']}\n\n" for user_data in users_data])
+
+        await message.reply(f"{users_data_str}", reply_markup=main_menu_keyboard)
+
+        await state.finish()  # Завершение FSM сессии
+
+    else:
+        await message.reply(f"Вы не администратор", reply_markup=main_menu_keyboard)
 
 
 @dp.message_handler(lambda message: message.text.startswith('/'), state="*")
@@ -330,6 +351,8 @@ async def unknown_command(message: types.Message, state: FSMContext):
                         "Пожалуйста, используй одну из известных мне команд.",
                         reply_markup=main_menu_keyboard)
     await state.finish()  # Завершение FSM сессии
+
+
 
 
 # Запуск бота

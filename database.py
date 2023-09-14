@@ -22,3 +22,6 @@ async def add_user(conn, user_id, first_name, last_name, email, registration_dat
 async def get_user(conn, user_id):
     return await conn.fetchrow('SELECT * FROM users WHERE user_id = $1', user_id)
 
+
+async def get_all_users(conn):
+    return await conn.fetch('SELECT * FROM users')
