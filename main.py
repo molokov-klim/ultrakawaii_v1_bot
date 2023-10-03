@@ -161,7 +161,8 @@ f'''
 ''',
                                parse_mode=types.ParseMode.MARKDOWN)
         await bot.send_message(chat_id=call.message.chat.id, text=''' 
-записаться
+*в разработке*
+Здесь будет кнопка - "записаться"
         ''', parse_mode=types.ParseMode.MARKDOWN)
 
     elif call.data == 'about':
@@ -362,10 +363,11 @@ async def process_lectures_sub_category(call: types.CallbackQuery):
 
     if call.data == 'mini_course_business_novice':
         await bot.send_message(call.message.chat.id, text='''
-описание курса и ссылка на оплату
+Скоро откроются продажи!
         ''')
         await bot.send_message(call.message.chat.id, text='''
-записаться
+*в разработке*
+Здесь будет кнопка - "записаться"
                 ''')
 
     elif call.data == 'lecture_agent_in_china':
