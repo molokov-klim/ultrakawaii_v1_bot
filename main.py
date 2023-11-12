@@ -29,6 +29,7 @@ pool = None
 main_menu_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
 main_menu_keyboard.add("Главное меню")
 
+VERSION = '0.2.12'
 
 async def on_startup(dp):
     print(f"{inspect.currentframe().f_code.co_name}")
