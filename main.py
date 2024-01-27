@@ -1,15 +1,14 @@
 import inspect
-import logging
 import os.path
 from datetime import datetime
 
 from email_validator import validate_email, EmailNotValidError
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram import types
+
 from aiogram.dispatcher import FSMContext
 
-from aiogram.utils import executor
+# from aiogram.utils import executor
 
 from FSM import Form
 
@@ -17,47 +16,23 @@ from loguru import logger
 
 from const.bot_link import BotLink
 from const.bot_text import BotText
+from const.bot_callback_data import BotCallBackData as callback
 from database import create_pool, add_user, get_user, get_all_users
 
 import config
 
-# Инициализация бота и диспетчера
-bot = Bot(token=config.BOT_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+from base import dp, bot, main_menu_keyboard
+from base import Base
+from handlers.command_handler import start, admin
 
-pool = None
-main_menu_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-main_menu_keyboard.add("Главное меню")
-
-
-async def on_startup(dp):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    global pool
-    pool = await create_pool()
-
-
-# Обработчик команды /start
-@dp.message_handler(commands='start', state='*')
-async def cmd_start(message: types.Message):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    user_id = message.from_user.id  # Получение user_id из сообщения
-
-    async with pool.acquire() as conn:
-        user_data = await get_user(conn, user_id)
-
-    if user_data:
-        await message.reply(f"Здравствуй, {message.from_user.first_name}!", reply_markup=main_menu_keyboard)
-    else:
-        await Form.email.set()  # переход к состоянию имени
-        await message.reply(
-            f"Здравствуй, {message.from_user.first_name}! Напиши свой email для окончания регистрации.")  # отправка сообщения
+base = Base()
 
 
 # Обработчик ввода email
 @dp.message_handler(state=Form.email, content_types=types.ContentTypes.TEXT)
 async def process_email(message: types.Message, state: FSMContext):
     logger.info(f"{inspect.currentframe().f_code.co_name}")
+    pool = base.pool
     email = message.text
     try:
         # Валидация email
@@ -93,10 +68,10 @@ async def show_main_menu(message: types.Message):
     # Создание кнопок для выбора категории
     markup = types.InlineKeyboardMarkup()
     markup.add(
-        types.InlineKeyboardButton("Услуги", callback_data='services'),
-        types.InlineKeyboardButton("Консультация", callback_data='consultation'),
-        types.InlineKeyboardButton("Лекции", callback_data='lectures'),
-        types.InlineKeyboardButton("О нас", callback_data='about'),
+        types.InlineKeyboardButton("Услуги", callback_data=callback.SERVICES),
+        types.InlineKeyboardButton("Консультация", callback_data=callback.CONSULTATION),
+        types.InlineKeyboardButton("Лекции", callback_data=callback.LECTURES),
+        types.InlineKeyboardButton("О нас", callback_data=callback.ABOUT),
     )
 
     # Отправка сообщения с кнопками
@@ -104,81 +79,92 @@ async def show_main_menu(message: types.Message):
 
 
 # Обработчик выбора категории
-@dp.callback_query_handler(lambda c: c.data in ['services', 'consultation', 'about', 'lectures'], state='*')
+@dp.callback_query_handler(lambda c: c.data in [
+    callback.SERVICES,
+    callback.CONSULTATION,
+    callback.ABOUT,
+    callback.LECTURES], state='*')
 async def process_main_category(call: types.CallbackQuery, state: FSMContext):
     logger.info(f"{inspect.currentframe().f_code.co_name}")
-    await call.answer("OK")  # подтверждение выбора
+    await call.answer("")  # подтверждение выбора
     await state.finish()  # завершение сессии бота
 
     # Отправка информационных сообщений в зависимости от выбранной категории
-    if call.data == 'services':
+    if call.data == callback.SERVICES:
         markup = types.InlineKeyboardMarkup()
         markup.add(
-            types.InlineKeyboardButton("Агент", callback_data='agent'),
-            types.InlineKeyboardButton("Выкуп", callback_data='buying'),
-            types.InlineKeyboardButton("Доставка", callback_data='delivery'),
-            types.InlineKeyboardButton("Бренд", callback_data='brand'),
-            types.InlineKeyboardButton("Фулфилмент", callback_data='fulfillment'),
+            types.InlineKeyboardButton("Агент", callback_data=callback.Services.AGENT),
+            types.InlineKeyboardButton("Выкуп", callback_data=callback.Services.BUYING),
+            types.InlineKeyboardButton("Доставка", callback_data=callback.Services.DELIVERY),
+            types.InlineKeyboardButton("Бренд", callback_data=callback.Services.BRAND),
+            types.InlineKeyboardButton("Фулфилмент", callback_data=callback.Services.FULFILLMENT),
         )
         await bot.send_message(call.message.chat.id, "Выберите подкатегорию:", reply_markup=markup)
 
-    elif call.data == 'consultation':
+    elif call.data == callback.CONSULTATION:
         await bot.send_message(chat_id=call.message.chat.id, text=BotText.CONSULTATION,
                                parse_mode=types.ParseMode.MARKDOWN)
 
-    elif call.data == 'about':
+    elif call.data == callback.ABOUT:
         await bot.send_message(chat_id=call.message.chat.id, text=BotText.ABOUT,
                                parse_mode=types.ParseMode.MARKDOWN)
 
-    elif call.data == 'lectures':
+    elif call.data == callback.LECTURES:
         markup = types.InlineKeyboardMarkup()
         markup.add(
             types.InlineKeyboardButton("Мини-курс \"Бизнес с Китаем для новичков\"",
-                                       callback_data='mini_course_business_novice'),
-            types.InlineKeyboardButton("Лекция \"Агент в Китае\"", callback_data='lecture_intro')
+                                       callback_data=callback.Lectures.MINI_COURSE_BUSINESS_NOVICE),
+            types.InlineKeyboardButton("Лекция \"ТОП 10 ошибок при закупке из Китая\"",
+                                       callback_data=callback.Lectures.LECTURE_INTRO)
         )
         await bot.send_message(call.message.chat.id, "Выберите подкатегорию:", reply_markup=markup)
 
 
 # services
 @dp.callback_query_handler(
-    lambda c: c.data in ['agent', 'buying', 'delivery', 'brand', 'fulfillment'])
+    lambda c: c.data in [callback.Services.AGENT,
+                         callback.Services.BUYING,
+                         callback.Services.DELIVERY,
+                         callback.Services.BRAND,
+                         callback.Services.FULFILLMENT])
 async def process_services_sub_category(call: types.CallbackQuery):
     logger.info(f"{inspect.currentframe().f_code.co_name}")
     await call.answer("")  # подтверждение выбора
 
-    if call.data == 'agent':
+    if call.data == callback.Services.AGENT:
         await bot.send_message(call.message.chat.id,
                                text=BotText.AGENT)
-    elif call.data == 'buying':
+    elif call.data == callback.Services.BUYING:
         await bot.send_message(chat_id=call.message.chat.id, text=BotText.BUYING,
                                parse_mode=types.ParseMode.MARKDOWN)
-    elif call.data == 'delivery':
+    elif call.data == callback.Services.DELIVERY:
         await bot.send_message(call.message.chat.id,
                                text=BotText.DELIVERY)
-    elif call.data == 'brand':
+    elif call.data == callback.Services.BRAND:
         await bot.send_message(call.message.chat.id, text=BotText.BRAND)
-    elif call.data == 'fulfillment':
+    elif call.data == callback.Services.FULFILLMENT:
         await bot.send_message(call.message.chat.id, text=BotText.FULFILLMENT)
 
 
 # lectures
 @dp.callback_query_handler(
-    lambda c: c.data in ['mini_course_business_novice', 'lecture_intro'])
+    lambda c: c.data in [callback.Lectures.MINI_COURSE_BUSINESS_NOVICE,
+                         callback.Lectures.LECTURE_INTRO])
 async def process_lectures_sub_category(call: types.CallbackQuery):
     logger.info(f"{inspect.currentframe().f_code.co_name}")
     await call.answer("")  # подтверждение выбора
 
-    if call.data == 'mini_course_business_novice':
+    if call.data == callback.Lectures.MINI_COURSE_BUSINESS_NOVICE:
         await bot.send_message(call.message.chat.id, text=BotLink.LECTURE_MINI_COURSE)
 
-    elif call.data == 'lecture_intro':
+    elif call.data == callback.Lectures.LECTURE_INTRO:
         await bot.send_message(call.message.chat.id, text=BotLink.LECTURE_INTRO)
 
 
 @dp.message_handler(content_types=types.ContentType.DOCUMENT)
 async def handle_docs(message: types.Message):
     logger.info(f"{inspect.currentframe().f_code.co_name}")
+    pool = base.pool
     file_id = message.document.file_id
     file_name = message.document.file_name
 
@@ -223,31 +209,6 @@ async def handle_docs(message: types.Message):
     await bot.send_document(chat_id=config.ADMIN_2_ID, document=file_id)
 
 
-@dp.message_handler(commands='admin', state="*")
-async def admin(message: types.Message, state: FSMContext):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-
-    user_id = message.from_user.id
-
-    if user_id == config.ADMIN_ID or user_id == config.ADMIN_2_ID:
-
-        async with pool.acquire() as conn:
-            users_data = await get_all_users(conn)
-
-        users_data_str = "\n".join(
-            [
-                f"Имя: {user_data['first_name']} {user_data['last_name']}\nEmail: {user_data['email']}\nID: {user_data['user_id']}\nДата регистрации: {user_data['registration_date']}\n\n"
-                for user_data in users_data])
-
-        await message.reply(f"{users_data_str}", reply_markup=main_menu_keyboard)
-
-        await state.finish()  # Завершение FSM сессии
-
-    else:
-        await message.reply(f"Вы не администратор. Операция запрещена",
-                            reply_markup=main_menu_keyboard)
-
-
 @dp.message_handler(lambda message: message.text.startswith('/'), state="*")
 async def unknown_command(message: types.Message, state: FSMContext):
     logger.info(f"{inspect.currentframe().f_code.co_name}")
@@ -259,4 +220,4 @@ async def unknown_command(message: types.Message, state: FSMContext):
 
 # Запуск бота
 if __name__ == '__main__':
-    executor.start_polling(dp, on_startup=on_startup, skip_updates=True)
+    base.start_polling()
