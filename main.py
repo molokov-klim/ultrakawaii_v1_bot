@@ -2,6 +2,7 @@ import inspect
 import os.path
 from datetime import datetime
 
+from aiogram.types import ContentType
 from email_validator import validate_email, EmailNotValidError
 
 from aiogram import types
@@ -12,210 +13,152 @@ from aiogram.dispatcher import FSMContext
 
 from FSM import Form
 
-from loguru import logger
-
-from const.bot_link import BotLink
-from const.bot_text import BotText
-from const.bot_callback_data import BotCallBackData as callback
 from database import create_pool, add_user, get_user, get_all_users
+from const.lectures import Lectures
+from const.services import Services
+from const.consultation import Consultation
+from const.about import About
+from const.payments import Payments
 
 import config
 
 from base import dp, bot, main_menu_keyboard
 from base import Base
 from handlers.command_handler import start, admin
+from handlers.files_handler import handle_docs
+from handlers.registration_handler import process_email
+from handlers.other_handlers import unknown_command
 
 base = Base()
 
 
-# Обработчик ввода email
-@dp.message_handler(state=Form.email, content_types=types.ContentTypes.TEXT)
-async def process_email(message: types.Message, state: FSMContext):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    pool = base.pool
-    email = message.text
-    try:
-        # Валидация email
-        v = validate_email(email)
-        valid_email = v.email
-    except EmailNotValidError as error:
-        await message.reply("Введенный email недействителен. Пожалуйста, попробуйте еще раз.")
-        return
-    await Form.category.set()  # переход к состоянию категории
-    await state.update_data(email=valid_email)  # сохранение email
-    # Получение всех данных о пользователе
-    user_data = await state.get_data()
-    user_id = message.from_user.id
-    first_name = message.from_user.first_name  # Получение данных из сообщения
-    last_name = message.from_user.last_name
-    email = user_data.get("email")  # Получение email из FSM
-    date = message.date
-    # Добавление пользователя в базу данных
-    async with pool.acquire() as conn:
-        await add_user(conn, user_id=user_id,
-                       first_name=first_name,
-                       last_name=last_name,
-                       email=email,
-                       registration_date=date)
-    await message.reply(f"{message.from_user.first_name}, твоя регистрация завершена успешно!",
-                        reply_markup=main_menu_keyboard)
-    await state.finish()  # Завершение FSM сессии
-
-
 @dp.message_handler(lambda message: message.text == "Главное меню")
 async def show_main_menu(message: types.Message):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    # Создание кнопок для выбора категории
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("Услуги", callback_data=callback.SERVICES),
-        types.InlineKeyboardButton("Консультация", callback_data=callback.CONSULTATION),
-        types.InlineKeyboardButton("Лекции", callback_data=callback.LECTURES),
-        types.InlineKeyboardButton("О нас", callback_data=callback.ABOUT),
-    )
+    try:
 
-    # Отправка сообщения с кнопками
-    await message.reply("Пожалуйста, выберите интересующий вас раздел:", reply_markup=markup)
+        # Создание кнопок для выбора категории
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton(text=Services.description, callback_data=Services.callback),
+            types.InlineKeyboardButton(text=Consultation.description, callback_data=Consultation.callback),
+            types.InlineKeyboardButton(text=Lectures.description, callback_data=Lectures.callback),
+            types.InlineKeyboardButton(text=About.description, callback_data=About.callback),
+            types.InlineKeyboardButton(text=Payments.description, callback_data=Payments.callback)
+        )
+
+        # Отправка сообщения с кнопками
+        await message.reply("Пожалуйста, выберите интересующий вас раздел:", reply_markup=markup)
+    except Exception as error:
+        await bot.send_message("Что-то пошло не так. Повторите пожалуйста",
+                               reply_markup=main_menu_keyboard)
+        pass
 
 
 # Обработчик выбора категории
 @dp.callback_query_handler(lambda c: c.data in [
-    callback.SERVICES,
-    callback.CONSULTATION,
-    callback.ABOUT,
-    callback.LECTURES], state='*')
+    Services.callback,
+    Consultation.callback,
+    About.callback,
+    Lectures.callback,
+    Payments.callback], state='*')
 async def process_main_category(call: types.CallbackQuery, state: FSMContext):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    await call.answer("")  # подтверждение выбора
-    await state.finish()  # завершение сессии бота
+    try:
+        await call.answer("")  # подтверждение выбора
+        await state.finish()  # завершение сессии бота
 
-    # Отправка информационных сообщений в зависимости от выбранной категории
-    if call.data == callback.SERVICES:
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton("Агент", callback_data=callback.Services.AGENT),
-            types.InlineKeyboardButton("Выкуп", callback_data=callback.Services.BUYING),
-            types.InlineKeyboardButton("Доставка", callback_data=callback.Services.DELIVERY),
-            types.InlineKeyboardButton("Бренд", callback_data=callback.Services.BRAND),
-            types.InlineKeyboardButton("Фулфилмент", callback_data=callback.Services.FULFILLMENT),
-        )
-        await bot.send_message(call.message.chat.id, "Выберите подкатегорию:", reply_markup=markup)
+        # Отправка информационных сообщений в зависимости от выбранной категории
+        if call.data == Services.callback:
+            markup = types.InlineKeyboardMarkup()
+            for service in Services.list_services:
+                markup.add(types.InlineKeyboardButton(text=service.description,
+                                                      callback_data=service.callback))
+            await bot.send_message(call.message.chat.id, "Выберите услугу:", reply_markup=markup)
 
-    elif call.data == callback.CONSULTATION:
-        await bot.send_message(chat_id=call.message.chat.id, text=BotText.CONSULTATION,
-                               parse_mode=types.ParseMode.MARKDOWN)
+        elif call.data == Consultation.callback:
+            await bot.send_message(chat_id=call.message.chat.id, text=Consultation.text,
+                                   parse_mode=types.ParseMode.MARKDOWN)
 
-    elif call.data == callback.ABOUT:
-        await bot.send_message(chat_id=call.message.chat.id, text=BotText.ABOUT,
-                               parse_mode=types.ParseMode.MARKDOWN)
+        elif call.data == About.callback:
+            await bot.send_message(chat_id=call.message.chat.id, text=About.text,
+                                   parse_mode=types.ParseMode.MARKDOWN)
 
-    elif call.data == callback.LECTURES:
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton("Мини-курс \"Бизнес с Китаем для новичков\"",
-                                       callback_data=callback.Lectures.MINI_COURSE_BUSINESS_NOVICE),
-            types.InlineKeyboardButton("Лекция \"ТОП 10 ошибок при закупке из Китая\"",
-                                       callback_data=callback.Lectures.LECTURE_INTRO)
-        )
-        await bot.send_message(call.message.chat.id, "Выберите подкатегорию:", reply_markup=markup)
+        elif call.data == Lectures.callback:
+            markup = types.InlineKeyboardMarkup()
+            for lecture in Lectures.list_lectures:
+                markup.add(types.InlineKeyboardButton(text=lecture.description,
+                                                      callback_data=lecture.callback))
+            await bot.send_message(call.message.chat.id, "Выберите лекцию:", reply_markup=markup)
+
+        elif call.data == Payments.callback:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(text=Payments.TestPayment.description,
+                                                  callback_data=Payments.TestPayment.callback))
+            await bot.send_message(call.message.chat.id, "Выберите оплату:", reply_markup=markup)
+
+    except Exception as error:
+        await bot.send_message("Что-то пошло не так. Повторите пожалуйста",
+                               reply_markup=main_menu_keyboard)
+        pass
 
 
-# services
 @dp.callback_query_handler(
-    lambda c: c.data in [callback.Services.AGENT,
-                         callback.Services.BUYING,
-                         callback.Services.DELIVERY,
-                         callback.Services.BRAND,
-                         callback.Services.FULFILLMENT])
+    lambda c: any(c.data == service.callback for service in Services.list_services)
+)
 async def process_services_sub_category(call: types.CallbackQuery):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    await call.answer("")  # подтверждение выбора
-
-    if call.data == callback.Services.AGENT:
-        await bot.send_message(call.message.chat.id,
-                               text=BotText.AGENT)
-    elif call.data == callback.Services.BUYING:
-        await bot.send_message(chat_id=call.message.chat.id, text=BotText.BUYING,
-                               parse_mode=types.ParseMode.MARKDOWN)
-    elif call.data == callback.Services.DELIVERY:
-        await bot.send_message(call.message.chat.id,
-                               text=BotText.DELIVERY)
-    elif call.data == callback.Services.BRAND:
-        await bot.send_message(call.message.chat.id, text=BotText.BRAND)
-    elif call.data == callback.Services.FULFILLMENT:
-        await bot.send_message(call.message.chat.id, text=BotText.FULFILLMENT)
+    try:
+        await call.answer("")  # подтверждение выбора
+        for service in Services.list_services:
+            if call.data == service.callback:
+                await bot.send_message(call.message.chat.id, text=service.text)
+    except Exception as error:
+        await bot.send_message("Что-то пошло не так. Повторите пожалуйста",
+                               reply_markup=main_menu_keyboard)
+        pass
 
 
 # lectures
 @dp.callback_query_handler(
-    lambda c: c.data in [callback.Lectures.MINI_COURSE_BUSINESS_NOVICE,
-                         callback.Lectures.LECTURE_INTRO])
+    lambda c: any(c.data == lecture.callback for lecture in Lectures.list_lectures)
+)
 async def process_lectures_sub_category(call: types.CallbackQuery):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    await call.answer("")  # подтверждение выбора
-
-    if call.data == callback.Lectures.MINI_COURSE_BUSINESS_NOVICE:
-        await bot.send_message(call.message.chat.id, text=BotLink.LECTURE_MINI_COURSE)
-
-    elif call.data == callback.Lectures.LECTURE_INTRO:
-        await bot.send_message(call.message.chat.id, text=BotLink.LECTURE_INTRO)
-
-
-@dp.message_handler(content_types=types.ContentType.DOCUMENT)
-async def handle_docs(message: types.Message):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    pool = base.pool
-    file_id = message.document.file_id
-    file_name = message.document.file_name
-
-    if '.xls' not in str(file_name) and '.xlsx' not in str(file_name):
-        await message.reply(
-            f"Документ не принят. Пожалуйста используйте формат .xls или .xlsx")
-        return
-    await message.reply(
-        f"Документ принят. Он будет передан нашей команде в обработку. Мы с вами свяжемся в ближайшее время")
-
-    if config.SAVE_FILES:
-        # Удостоверьтесь, что путь для сохранения файлов существует
-        if not os.path.exists(config.FILEPATH_REQUEST_FORMS):
-            os.makedirs(config.FILEPATH_REQUEST_FORMS)
-
-        # Сохранение файла
-        file_path = await bot.get_file(file_id=file_id)
-        await bot.download_file(file_path=file_path.file_path,
-                                destination=os.path.join(config.FILEPATH_REQUEST_FORMS,
-                                                         f"{message.from_user.last_name}_{message.from_user.id}_{datetime.now().strftime('%d-%m-%Y %H-%M-%S')}_{file_name}"))
-
-    username = ''
     try:
-        username = message.from_user.username
+        await call.answer("")  # подтверждение выбора
+        for lecture in Lectures.list_lectures:
+            if call.data == lecture.callback:
+                await bot.send_message(call.message.chat.id, text=lecture.link)
     except Exception as error:
-        logger.error(f"{inspect.currentframe().f_code.co_name}: {error}")
+        await bot.send_message(f"Что-то пошло не так. Повторите пожалуйста",
+                               reply_markup=main_menu_keyboard)
         pass
 
-    user_mention = f"@{username}"
-    user_id = message.from_user.id  # Получение user_id из сообщения
 
-    async with pool.acquire() as conn:
-        user_data = await get_user(conn, user_id)
+@dp.callback_query_handler(text=Payments.TestPayment.callback)
+async def test_payment(call: types.CallbackQuery):
+    await bot.send_invoice(chat_id=call.from_user.id,
+                           title=Payments.TestPayment.text,
+                           description=Payments.TestPayment.description,
+                           provider_token=config.YOUKASSA_TOKEN_TEST,
+                           currency='rub',
+                           photo_url=Payments.TestPayment.image,
+                           photo_height=512,  # !=0/None, иначе изображение не покажется
+                           photo_width=512,
+                           photo_size=512,
+                           is_flexible=False,  # True если конечная цена зависит от способа доставки
+                           prices=Payments.TestPayment.prices,
+                           start_parameter=Payments.TestPayment.start_parameter,
+                           payload=Payments.TestPayment.payload
+                           )
 
-    await bot.send_message(chat_id=config.ADMIN_ID, text=f'''
-    Принят документ от {message.from_user.first_name} {message.from_user.last_name}\nusername: {user_mention}\nemail: {user_data['email']}
-    ''')
-    await bot.send_document(chat_id=config.ADMIN_ID, document=file_id)
-    await bot.send_message(chat_id=config.ADMIN_2_ID, text=f'''
-    Принят документ от {message.from_user.first_name} {message.from_user.last_name}\nusername: {user_mention}\nemail: {user_data['email']}
-    ''')
-    await bot.send_document(chat_id=config.ADMIN_2_ID, document=file_id)
+
+@dp.pre_checkout_query_handler()
+async def process_pre_checkout_query(pre_checkout_query: types.PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
 
 
-@dp.message_handler(lambda message: message.text.startswith('/'), state="*")
-async def unknown_command(message: types.Message, state: FSMContext):
-    logger.info(f"{inspect.currentframe().f_code.co_name}")
-    await message.reply("Извини, я не понимаю эту команду. Я же просто бот. "
-                        "Пожалуйста, используй одну из известных мне команд.",
-                        reply_markup=main_menu_keyboard)
-    await state.finish()  # Завершение FSM сессии
+@dp.message_handler(content_types=ContentType.SUCCESSFUL_PAYMENT)
+async def process_pay(message: types.Message):
+    if message.successful_payment.invoice_payload == 'test_payment_payload':
+        await bot.send_message(message.from_user.id, "Оплата принята, спасибо")
 
 
 # Запуск бота

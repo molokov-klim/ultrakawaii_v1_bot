@@ -2,7 +2,6 @@ import inspect
 
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram import Bot, Dispatcher
-from loguru import logger
 import config
 from database import create_pool
 from aiogram import types
@@ -21,24 +20,23 @@ class Base:
     _instance = None
 
     def __new__(cls, *args, **kwargs):
-        logger.info(f"{inspect.currentframe().f_code.co_name}")
         if not cls._instance:
-            logger.info(f"{inspect.currentframe().f_code.co_name}")
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):
-        logger.info(f"{inspect.currentframe().f_code.co_name}")
         if not hasattr(self, 'initialized'):
             self.initialized = True
             self.pool = None
 
     async def on_startup(self, dp):
-        logger.info(f"{inspect.currentframe().f_code.co_name}")
-        self.pool = await create_pool()
+        try:
+            self.pool = await create_pool()
+        except Exception as error:
+            pass
 
     def start_polling(self):
-        logger.info(f"{inspect.currentframe().f_code.co_name}")
-        executor.start_polling(dp, on_startup=self.on_startup, skip_updates=True)
-
-
+        try:
+            executor.start_polling(dp, on_startup=self.on_startup, skip_updates=True)
+        except Exception as error:
+            pass

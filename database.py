@@ -1,9 +1,13 @@
+import inspect
+
 import asyncpg
 
 import config
 
 
+
 async def create_pool():
+    
     try:
         return await asyncpg.create_pool(
             user=config.DB_USER,
@@ -12,20 +16,31 @@ async def create_pool():
             host=config.DB_HOST,
             port=config.DB_PORT
         )
-    except Exception as e:
-        print(f"Error creating database pool: {e}")
-        return None
+    except Exception as error:
+        pass
 
 
 async def add_user(conn, user_id, first_name, last_name, email, registration_date):
-    await conn.execute('''
-    INSERT INTO users (user_id, first_name, last_name, email, registration_date) VALUES ($1, $2, $3, $4, $5)
-    ''', user_id, first_name, last_name, email, registration_date)
+    try:
+        
+        await conn.execute('''
+        INSERT INTO users (user_id, first_name, last_name, email, registration_date) VALUES ($1, $2, $3, $4, $5)
+        ''', user_id, first_name, last_name, email, registration_date)
+    except Exception as error:
+        pass
 
 
 async def get_user(conn, user_id):
-    return await conn.fetchrow('SELECT * FROM users WHERE user_id = $1', user_id)
+    try:
+        
+        return await conn.fetchrow('SELECT * FROM users WHERE user_id = $1', user_id)
+    except Exception as error:
+        pass
 
 
 async def get_all_users(conn):
-    return await conn.fetch('SELECT * FROM users')
+    try:
+        
+        return await conn.fetch('SELECT * FROM users')
+    except Exception as error:
+        pass
